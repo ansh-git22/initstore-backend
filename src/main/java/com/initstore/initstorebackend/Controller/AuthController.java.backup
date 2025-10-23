@@ -1,0 +1,84 @@
+package com.initstore.initstorebackend.Controller;
+
+import com.initstore.initstorebackend.model.LoginRequest;
+import com.initstore.initstorebackend.model.SignupRequest;
+import com.initstore.initstorebackend.model.User;
+import com.initstore.initstorebackend.repository.UserRepository;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/auth")
+@CrossOrigin(origins = "*")
+public class AuthController {
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    // Secret key - must be at least 256 bits (32 characters) for HS256
+    private String jwtSecret = "mySecretKeyForJWTTokenGeneration1234567890abcdefghijklmnop";
+
+    @PostMapping("/signup")
+    public ResponseEntity<?> registerUser(@RequestBody SignupRequest signupRequest) {
+        // Check if email already exists
+        if (userRepository.findByEmail(signupRequest.getEmail()).isPresent()) {
+            Map<String, String> errorResponse = new HashMap<>();
+            errorResponse.put("message", "Error: Email is already in use!");
+            return ResponseEntity.badRequest().body(errorResponse);
+        }
+        
+        // Create new user
+        User newUser = new User();
+        newUser.setName(signupRequest.getName());
+        newUser.setEmail(signupRequest.getEmail());
+        newUser.setPassword(passwordEncoder.encode(signupRequest.getPassword()));
+        
+        userRepository.save(newUser);
+        
+        Map<String, String> successResponse = new HashMap<>();
+        successResponse.put("message", "User registered successfully!");
+        return ResponseEntity.ok(successResponse);
+    }
+
+    @PostMapping("/signin")
+    public ResponseEntity<?> authenticateUser(@RequestBody LoginRequest loginRequest) {
+        // Find user by email
+        User user = userRepository.findByEmail(loginRequest.getEmail())
+                .orElse(null);
+
+        // Validate credentials
+        if (user == null || !passwordEncoder.matches(loginRequest.getPassword(), user.getPassword())) {
+            Map<String, String> errorResponse = new HashMap<>();
+            errorResponse.put("message", "Error: Invalid email or password.");
+            return ResponseEntity.status(401).body(errorResponse);
+        }
+
+        // Generate JWT token using HS256 algorithm
+        String token = Jwts.builder()
+                .setSubject(user.getEmail())
+                .setIssuedAt(new Date())
+                .setExpiration(new Date(System.currentTimeMillis() + 86400000)) // 24 hours
+                .signWith(SignatureAlgorithm.HS256, jwtSecret)
+                .compact();
+        
+        // Prepare response
+        Map<String, Object> response = new HashMap<>();
+        response.put("token", token);
+        response.put("email", user.getEmail());
+        response.put("name", user.getName());
+        response.put("id", user.getId());
+
+        return ResponseEntity.ok(response);
+    }
+}
