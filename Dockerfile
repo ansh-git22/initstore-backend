@@ -1,17 +1,21 @@
-# Build stage
-FROM maven:3.8.5-openjdk-17 AS build
+# -------- BUILD STAGE --------
+FROM maven:3.9.9-eclipse-temurin-17 AS build
 WORKDIR /app
+
 COPY pom.xml .
+RUN mvn dependency:go-offline
+
 COPY src ./src
 RUN mvn clean package -DskipTests
 
-# Run stage
-FROM openjdk:17-jdk-slim
+# -------- RUN STAGE --------
+FROM eclipse-temurin:17-jdk-jammy
 WORKDIR /app
+
 COPY --from=build /app/target/*.jar app.jar
 
-# Render assigns a dynamic PORT, expose it
+# Render uses dynamic PORT
 EXPOSE 8080
 
-# Run the application
+# Start app
 ENTRYPOINT ["java", "-Dserver.port=${PORT}", "-jar", "app.jar"]
